@@ -1,0 +1,70 @@
+[
+  {
+    "scheme_id": "aicte_pragati_degree",
+    "name": "AICTE Pragati Scholarship Scheme for Girl Students (Technical Degree)",
+    "category": "scholarship",
+    "government_level": "central",
+    "state": null,
+    "summary": "Scholarship support for girl students admitted to first year technical degree courses or second year technical degree courses through lateral entry in AICTE-approved institutions.",
+    "target_groups": [
+      "girl students",
+      "technical degree students",
+      "AICTE-approved institution students"
+    ],
+    "benefits": [
+      "Rs. 50,000 per annum for every year of study, up to 4 years for first-year admitted degree students.",
+      "Up to 3 years of support for students admitted into second year through lateral entry.",
+      "The amount is a lump sum for college fee, computer, stationery, books, equipment, software, and related education expenses."
+    ],
+    "required_documents": [
+      "Valid family income certificate issued by State/UT Government",
+      "Academic details from the qualifying examination",
+      "Institution verification through the National Scholarship Portal",
+      "For renewal, passing certificate or marksheet and letter from the Head of Institution"
+    ],
+    "eligibility_text": [
+      "Applicant should be a girl student.",
+      "Applicant should be admitted to first year of a degree-level technical course, or second year of a degree-level technical course through lateral entry.",
+      "The institution should be AICTE-approved.",
+      "Maximum two girl children per family are eligible.",
+      "Family income from all sources should not be more than Rs. 8 lakh per annum.",
+      "Applicant should not be receiving another scholarship or financial assistance from another source during the course."
+    ],
+    "application_steps": [
+      "Go to the National Scholarship Portal.",
+      "Complete registration or login using the official NSP flow.",
+      "Select the AICTE Pragati Scholarship Scheme for Girl Students (Technical Degree), if available for the current academic year.",
+      "Fill academic, institution, income, and other required details only on the official portal.",
+      "Submit the application before the student deadline.",
+      "Track institute and nodal verification status on the official portal."
+    ],
+    "application_window": {
+      "academic_year": "2026-27",
+      "status": "open",
+      "opens_at": "2026-06-01",
+      "student_deadline": "2026-10-31",
+      "institute_verification_deadline": "2026-11-15",
+      "final_verification_deadline": "2026-11-30",
+      "notes": "Application window captured from NSP All Scholarships listing. Verify again on NSP before advising a real user."
+    },
+    "official_apply_url": "https://scholarships.gov.in/",
+    "sources": [
+      {
+        "source_type": "official_pdf",
+        "title": "Guidelines for AICTE Pragati Scholarship Scheme for Girl Students (Degree)",
+        "publisher": "National Scholarship Portal / All India Council for Technical Education",
+        "url": "https://scholarships.gov.in/public/schemeGuidelines/AICTE/AICTE_2010_G.pdf",
+        "last_checked_at": "2026-06-27",
+        "notes": "Used for eligibility, benefit amount, application procedure, selection, and renewal details. The PDF itself is marked 2020-21, so current application dates are taken from the NSP listing source."
+      },
+      {
+        "source_type": "official_portal",
+        "title": "NSP All Scholarships listing for AY 2026-27",
+        "publisher": "National Scholarship Portal",
+        "url": "https://scholarships.gov.in/All-Scholarships",
+        "last_checked_at": "2026-06-27",
+        "notes": "Used for the current academic year application window and verification deadlines."
+      }
+    ]
+  }
+]
