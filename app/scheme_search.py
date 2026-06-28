@@ -51,6 +51,16 @@ def _is_technical_degree_scheme(scheme_text: str) -> bool:
     technical_terms = ["technical", "degree", "aicte", "engineering"]
     return any(term in scheme_text for term in technical_terms)
 
+def _is_disability_focused_scheme(scheme_text: str) -> bool:
+    disability_terms = [
+        "specially-abled",
+        "disabled",
+        "disability",
+        "divyang",
+        "pwd",
+    ]
+
+    return any(term in scheme_text for term in disability_terms)
 
 
 
@@ -110,6 +120,21 @@ def score_scheme_for_profile(profile: CitizenProfile, scheme: Scheme) -> SchemeS
         else:
             possible_concerns.append("The scheme may be girl/female-focused, but the user did not share female gender.")
 
+    if _is_disability_focused_scheme(scheme_text):
+        if profile.has_disability is True:
+            score += 0.20
+            matched_reasons.append("The scheme is disability-focused and the user shared disability status.")
+        elif profile.has_disability is False:
+            return SchemeSearchResult(
+                scheme=scheme,
+                score=0.0,
+                matched_reasons=[],
+                possible_concerns=[
+                    "This scheme appears disability-focused, but the user did not report a disability."
+                ],
+            )
+        else:
+            possible_concerns.append("The scheme may be disability-focused, but disability status is missing.")
     if _is_technical_degree_scheme(scheme_text):
         if profile.education_level == EducationLevel.undergraduate:
             score += 0.10

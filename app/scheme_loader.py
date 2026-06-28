@@ -25,4 +25,4 @@ def load_schemes(path : Path = DEFAULT_SCHEME_DB_PATH) -> list[Scheme]:
         return [Scheme.model_validate(item) for item in raw_data]
     
     except ValidationError as e:
-        raise ValidationError(f"Error validating scheme data: {e}") from e
+        raise ValueError(f"Error validating scheme data: {e}") from e

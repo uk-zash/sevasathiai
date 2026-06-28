@@ -30,6 +30,128 @@
       "Family income from all sources should not be more than Rs. 8 lakh per annum.",
       "Applicant should not be receiving another scholarship or financial assistance from another source during the course."
     ],
+    "eligibility_rules": [
+  {
+    "field_name": "gender",
+    "operator": "equals",
+    "expected_value": "female",
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The girl-student condition applies to the user.",
+    "missing_message": "Gender or girl-student applicability is needed because this scheme is specifically for girl students.",
+    "failed_reason": "This scheme is specifically for girl students.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "is_student",
+    "operator": "is_true",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user is currently a student.",
+    "missing_message": "Student status is missing.",
+    "failed_reason": "This scheme is for students, but the user is not currently a student.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "education_level",
+    "operator": "equals",
+    "expected_value": "undergraduate",
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user is at undergraduate level, matching a degree-level scholarship.",
+    "missing_message": "Education level is missing; this scheme is for degree-level study.",
+    "failed_reason": "This scheme is for degree-level technical study, but the user's education level does not appear to be undergraduate.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "course_name",
+    "operator": "contains_any",
+    "expected_value": null,
+    "expected_values": ["b.tech", "btech", "b.e", "engineering", "technology"],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user's course appears to be technical or engineering-related.",
+    "missing_message": "Course name is missing; this scheme requires technical degree study.",
+    "failed_reason": "The course name does not appear to be a technical degree course.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "admission_type",
+    "operator": "in_list",
+    "expected_value": null,
+    "expected_values": ["first_year_regular", "second_year_lateral_entry"],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The admission type matches first-year regular admission or second-year lateral entry.",
+    "missing_message": "Admission type is missing; this scheme requires first-year degree admission or second-year lateral entry.",
+    "failed_reason": "The admission type does not match first-year regular admission or second-year lateral entry.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "is_aicte_approved_institution",
+    "operator": "is_true",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user says the institution is AICTE-approved.",
+    "missing_message": "AICTE approval status of the institution is missing.",
+    "failed_reason": "This scheme requires an AICTE-approved institution.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "annual_family_income",
+    "operator": "max_value",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": 800000,
+    "matched_reason": "The user's family income is within the Rs. 8 lakh annual limit.",
+    "missing_message": "Annual family income is missing.",
+    "failed_reason": "The user's family income is above the Rs. 8 lakh annual limit.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "has_valid_income_certificate",
+    "operator": "is_true",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user says they have a valid income certificate.",
+    "missing_message": "Income certificate availability is unknown.",
+    "failed_reason": "A valid State/UT income certificate is needed for application readiness.",
+    "failure_type": "missing"
+  },
+  {
+    "field_name": "girl_children_in_family",
+    "operator": "max_value",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": 2,
+    "matched_reason": "The number of girl children in the family is within the scheme limit.",
+    "missing_message": "Number of girl children in the family is missing.",
+    "failed_reason": "The scheme allows a maximum of two girl children per family.",
+    "failure_type": "blocking"
+  },
+  {
+    "field_name": "receiving_other_scholarship",
+    "operator": "is_false",
+    "expected_value": null,
+    "expected_values": [],
+    "min_value": null,
+    "max_value": null,
+    "matched_reason": "The user says they are not receiving another scholarship or financial assistance.",
+    "missing_message": "Other scholarship or financial assistance status is missing.",
+    "failed_reason": "The scheme does not allow receiving another scholarship or financial assistance during the course.",
+    "failure_type": "blocking"
+  }
+],
     "application_steps": [
       "Go to the National Scholarship Portal.",
       "Complete registration or login using the official NSP flow.",
@@ -66,5 +188,195 @@
         "notes": "Used for the current academic year application window and verification deadlines."
       }
     ]
-  }
+  },
+  {
+  "scheme_id": "aicte_saksham_degree",
+  "name": "AICTE Saksham Scholarship Scheme for Specially Abled Student (Technical Degree)",
+  "category": "scholarship",
+  "government_level": "central",
+  "state": null,
+  "summary": "Scholarship support for specially-abled students pursuing technical degree education in AICTE-approved institutions.",
+  "target_groups": [
+    "specially-abled students",
+    "technical degree students",
+    "AICTE-approved institution students"
+  ],
+  "benefits": [
+    "Rs. 50,000 per annum for every year of study, up to 4 years for first-year admitted degree students.",
+    "Up to 3 years of support for students admitted into second year through lateral entry.",
+    "The amount is a lump sum for college fee, computer, stationery, books, equipment, software, and related education expenses."
+  ],
+  "required_documents": [
+    "Valid family income certificate issued by State/UT Government",
+    "Disability certificate or disability details as required by the official portal",
+    "Academic details from the qualifying examination",
+    "Institution verification through the National Scholarship Portal",
+    "For renewal, passing certificate or marksheet and letter from the Head of Institution"
+  ],
+  "eligibility_text": [
+    "Applicant should be admitted to first year of a degree-level technical course, or second year of a degree-level technical course through lateral entry.",
+    "The institution should be AICTE-approved.",
+    "Applicant should be a specially-abled student with disability not less than 40%.",
+    "Family income from all sources should not be more than Rs. 8 lakh per annum.",
+    "Applicant should not be receiving another scholarship or financial assistance from another source during the course."
+  ],
+  "eligibility_rules": [
+    {
+      "field_name": "is_student",
+      "operator": "is_true",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user is currently a student.",
+      "missing_message": "Student status is missing.",
+      "failed_reason": "This scheme is for students, but the user is not currently a student.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "has_disability",
+      "operator": "is_true",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user says they have a disability.",
+      "missing_message": "Disability status is missing; this scheme is for specially-abled students.",
+      "failed_reason": "This scheme is for specially-abled students.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "disability_percentage",
+      "operator": "min_value",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": 40,
+      "max_value": null,
+      "matched_reason": "The user's disability percentage is at least 40%.",
+      "missing_message": "Disability percentage is missing; this scheme requires disability of not less than 40%.",
+      "failed_reason": "This scheme requires disability of not less than 40%.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "education_level",
+      "operator": "equals",
+      "expected_value": "undergraduate",
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user is at undergraduate level, matching a degree-level scholarship.",
+      "missing_message": "Education level is missing; this scheme is for degree-level study.",
+      "failed_reason": "This scheme is for degree-level technical study, but the user's education level does not appear to be undergraduate.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "course_name",
+      "operator": "contains_any",
+      "expected_value": null,
+      "expected_values": ["b.tech", "btech", "b.e", "engineering", "technology"],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user's course appears to be technical or engineering-related.",
+      "missing_message": "Course name is missing; this scheme requires technical degree study.",
+      "failed_reason": "The course name does not appear to be a technical degree course.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "admission_type",
+      "operator": "in_list",
+      "expected_value": null,
+      "expected_values": ["first_year_regular", "second_year_lateral_entry"],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The admission type matches first-year regular admission or second-year lateral entry.",
+      "missing_message": "Admission type is missing; this scheme requires first-year degree admission or second-year lateral entry.",
+      "failed_reason": "The admission type does not match first-year regular admission or second-year lateral entry.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "is_aicte_approved_institution",
+      "operator": "is_true",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user says the institution is AICTE-approved.",
+      "missing_message": "AICTE approval status of the institution is missing.",
+      "failed_reason": "This scheme requires an AICTE-approved institution.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "annual_family_income",
+      "operator": "max_value",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": 800000,
+      "matched_reason": "The user's family income is within the Rs. 8 lakh annual limit.",
+      "missing_message": "Annual family income is missing.",
+      "failed_reason": "The user's family income is above the Rs. 8 lakh annual limit.",
+      "failure_type": "blocking"
+    },
+    {
+      "field_name": "has_valid_income_certificate",
+      "operator": "is_true",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user says they have a valid income certificate.",
+      "missing_message": "Income certificate availability is unknown.",
+      "failed_reason": "A valid State/UT income certificate is needed for application readiness.",
+      "failure_type": "missing"
+    },
+    {
+      "field_name": "receiving_other_scholarship",
+      "operator": "is_false",
+      "expected_value": null,
+      "expected_values": [],
+      "min_value": null,
+      "max_value": null,
+      "matched_reason": "The user says they are not receiving another scholarship or financial assistance.",
+      "missing_message": "Other scholarship or financial assistance status is missing.",
+      "failed_reason": "The scheme does not allow receiving another scholarship or financial assistance during the course.",
+      "failure_type": "blocking"
+    }
+  ],
+  "application_steps": [
+    "Go to the National Scholarship Portal.",
+    "Complete registration or login using the official NSP flow.",
+    "Select the AICTE Saksham Scholarship Scheme for Specially Abled Student (Technical Degree), if available for the current academic year.",
+    "Fill academic, institution, income, disability, and other required details only on the official portal.",
+    "Submit the application before the student deadline.",
+    "Track institute and nodal verification status on the official portal."
+  ],
+  "application_window": {
+    "academic_year": "2026-27",
+    "status": "open",
+    "opens_at": "2026-06-01",
+    "student_deadline": "2026-10-31",
+    "institute_verification_deadline": "2026-11-15",
+    "final_verification_deadline": "2026-11-30",
+    "notes": "Application window captured from NSP All Scholarships listing. Verify again on NSP before advising a real user."
+  },
+  "official_apply_url": "https://scholarships.gov.in/",
+  "sources": [
+    {
+      "source_type": "official_pdf",
+      "title": "Guidelines for AICTE Saksham Scholarship Scheme for Specially Abled Student (Degree)",
+      "publisher": "National Scholarship Portal / All India Council for Technical Education",
+      "url": "https://scholarships.gov.in/public/schemeGuidelines/AICTE/AICTE_2012_G.pdf",
+      "last_checked_at": "2026-06-28",
+      "notes": "Used for eligibility, benefit amount, application procedure, renewal, and terms."
+    },
+    {
+      "source_type": "official_portal",
+      "title": "NSP All Scholarships listing for AY 2026-27",
+      "publisher": "National Scholarship Portal",
+      "url": "https://scholarships.gov.in/All-Scholarships",
+      "last_checked_at": "2026-06-28",
+      "notes": "Used for the current academic year application window and verification deadlines."
+    }
+  ]
+}
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations 
 from datetime import date
 from enum import Enum
+from typing import Any, Optional, List
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
@@ -67,10 +68,84 @@ class MatchStatus(str, Enum):
     not_enough_information = "not_enough_information"
     not_a_match = "not_a_match"
 
+class RuleOperator(str, Enum):
+    equals = "equals"
+    in_list = "in_list"
+    max_value = "max_value"
+    min_value = "min_value"
+    contains_any = "contains_any"
+    is_true = "is_true"
+    is_false = "is_false"
+
+
+class RuleFailureType(str, Enum):
+    blocking = "blocking"
+    missing = "missing"
+
+
+class EligibilityRule(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    field_name: str = Field(
+        min_length=2,
+        description="CitizenProfile field that this rule checks.",
+    )
+
+    operator: RuleOperator = Field(
+        description="Comparison operator used for this rule.",
+    )
+
+    expected_value: Any | None = Field(
+        default=None,
+        description="Single expected value for equals, is_true, or is_false checks.",
+    )
+
+    expected_values: list[Any] = Field(
+        default_factory=list,
+        description="List of allowed values or search terms for in_list and contains_any checks.",
+    )
+
+    min_value: float | None = Field(
+        default=None,
+        description="Minimum allowed numeric value for min_value checks.",
+    )
+
+    max_value: float | None = Field(
+        default=None,
+        description="Maximum allowed numeric value for max_value checks.",
+    )
+
+    matched_reason: str = Field(
+        min_length=5,
+        description="Reason shown when this rule passes.",
+    )
+
+    missing_message: str = Field(
+        min_length=5,
+        description="Message shown when the required profile value is missing.",
+    )
+
+    failed_reason: str = Field(
+        min_length=5,
+        description="Reason shown when this rule fails.",
+    )
+
+    failure_type: RuleFailureType = Field(
+        default=RuleFailureType.blocking,
+        description="Whether a failed rule is a blocking issue or a missing/readiness issue.",
+    )
+
 class ApplicationStatus(str, Enum):
     open = "open"
     not_yet_opened = "not_yet_opened"
     closed = "closed"
+    unknown = "unknown"
+
+class AdmissionType(str , Enum):
+    first_year_regular = "first_year_regular"
+    second_year_lateral_entry = "second_year_lateral_entry"
+    continuing_student = "continuing_student"
+    not_applicable = "not_applicable"
     unknown = "unknown"
 
 
@@ -195,6 +270,11 @@ class Scheme(BaseModel):
         description="Human-readable eligibility rules collected from official sources.",
     )
 
+    eligibility_rules: list[EligibilityRule] = Field(
+        default_factory=list,
+        description="Machine-readable eligibility and readiness rules for the generic rule engine.",
+    )
+
     application_steps: list[str] = Field(
     default_factory=list,
     description="Basic steps to apply or verify application process.",
@@ -247,7 +327,40 @@ class SchemeSearchResult(BaseModel):
         description="Concerns or missing details noticed during search.",
     )
 
-    
+
+class RecommendationLabel(str, Enum):
+    strong_match = "strong_match"
+    possible_match = "possible_match"
+    needs_information = "needs_information"
+    not_recommended = "not_recommended"
+
+
+class RankedSchemeResult(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    search_result: SchemeSearchResult = Field(
+        description="Original search result for this scheme.",
+    )
+
+    eligibility_result: EligibilityResult = Field(
+        description="Eligibility or readiness result for this scheme.",
+    )
+
+    rank_score: float = Field(
+        ge=0,
+        le=1,
+        description="Combined ranking score based on search relevance and eligibility result.",
+    )
+
+    recommendation_label: RecommendationLabel = Field(
+        description="Human-friendly recommendation category.",
+    )
+
+    rank_reasons: list[str] = Field(
+        default_factory=list,
+        description="Reasons explaining why this scheme received this ranking.",
+    )
+
 
 class EligibilityResult(BaseModel):
     scheme_id: str = Field(
@@ -337,10 +450,37 @@ class CitizenProfile(BaseModel):
         description="Type of institution where the user studies.",
     )
 
+    admission_type: AdmissionType | None = Field(
+        default = None,
+        description = "How the user was admitted to the course, such as first year regular or second year lateral entry.",
+    )
+
+    is_aicte_approved_institution: bool | None = Field(
+        default=None,
+        description="Whether the user's institution is AICTE-approved, if known."
+    )
+
     annual_family_income: float | None = Field(
         default=None,
         ge=0,
         description="Approximate annual family income in INR.",
+    )
+
+    has_valid_income_certificate: bool | None = Field(
+        default=None,
+        description="Whether the user has a valid income certificate issued by the State/UT Government.",
+    )
+
+    girl_children_in_family: int | None = Field(
+        default=None,
+        ge=0,
+        le=20,
+        description="Number of girl children in the family, if relevant and the user wants to share.",
+    )
+
+    receiving_other_scholarship: bool | None = Field(
+        default=None,
+        description="Whether the user is already receiving another scholarship or financial assistance.",
     )
 
     social_category: SocialCategory | None = Field(
@@ -353,12 +493,19 @@ class CitizenProfile(BaseModel):
         description="Whether the user has a disability, if they want to share it.",
     )
 
+    disability_percentage: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Disability percentage, if the user wants to share it and it is relevant to a scheme.",
+    )
+
     minority_status: bool | None = Field(
         default=None,
         description="Whether the user belongs to a minority community, if they want to share it.",
     )
 
-    wants_category_based_schemes: bool = Field(
+    wants_category_based_schemes: bool | None = Field(
         default=False,
         description="Whether the user wants us to consider category-based schemes.",
     )
@@ -398,4 +545,86 @@ class ProfileExtractionResult(BaseModel):
     privacy_warnings: list[str] = Field(
         default_factory=list,
         description="Warnings if the user shared or requested use of sensitive information.",
+    )
+
+
+## TAOR Trace Models
+
+class AgentAction(str, Enum):
+    extract_profile = "extract_profile"
+    search_schemes = "search_schemes"
+    check_eligibility = "check_eligibility"
+    rank_results = "rank_results"
+    ask_follow_up = "ask_follow_up"
+    final_response = "final_response"
+
+
+class AgentStep(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    step_number: int = Field(
+        ge=1,
+        description="Step number in the TAOR loop.",
+    )
+
+    thought: str = Field(
+        min_length=5,
+        description="High-level reason for the next action.",
+    )
+
+    action: AgentAction = Field(
+        description="Action selected by the agent.",
+    )
+
+    observation: str = Field(
+        min_length=5,
+        description="What the agent observed after taking the action.",
+    )
+
+    data: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional structured data captured for debugging or trace display.",
+    )
+
+class AgentRunResult(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    profile: CitizenProfile | None = Field(
+        default=None,
+        description="Extracted citizen profile, if extraction succeeded.",
+    )
+
+    search_results: list[SchemeSearchResult] = Field(
+        default_factory=list,
+        description="Candidate scheme search results.",
+    )
+
+    eligibility_results: list[EligibilityResult] = Field(
+        default_factory=list,
+        description="Eligibility or readiness results for candidate schemes.",
+    )
+
+    ranked_results: list[RankedSchemeResult] = Field(
+        default_factory=list,
+        description="Ranked scheme results combining search relevance and eligibility/readiness checks.",
+    )
+
+    steps: list[AgentStep] = Field(
+        default_factory=list,
+        description="TAOR trace steps.",
+    )
+
+    needs_follow_up: bool = Field(
+        default=False,
+        description="Whether the agent needs more information from the user.",
+    )
+
+    follow_up_questions: list[str] = Field(
+        default_factory=list,
+        description="Questions the agent should ask the user next.",
+    )
+
+    final_message: str = Field(
+        min_length=5,
+        description="Final user-facing message for this run.",
     )

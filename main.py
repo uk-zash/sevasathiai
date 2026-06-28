@@ -1,54 +1,42 @@
-from app.models import (
-    CitizenProfile,
-    EducationLevel,
-    Gender,
-    InstitutionType,
-    SocialCategory,
-)
-from app.scheme_search import search_schemes_for_profile
+from app.output_writer import save_agent_outputs
+from app.taor_agent import SevaSathiTAORAgent
 
 
 def main() -> None:
-    # profile = CitizenProfile(
-    #     age=21,
-    #     state="Maharashtra",
-    #     district=None,
-    #     gender=Gender.female,
-    #     is_student=True,
-    #     education_level=EducationLevel.undergraduate,
-    #     course_name="B.Tech",
-    #     institution_type=InstitutionType.private,
-    #     annual_family_income=180000,
-    #     social_category=SocialCategory.prefer_not_to_say,
-    #     has_disability=None,
-    #     minority_status=None,
-    #     wants_category_based_schemes=False,
-    # )
+    user_text = (
+        "I am 20 years old and I live in Maharashtra. "
+        "I am a female student with 45 percent disability. "
+        "I am doing B.Tech first year in an AICTE-approved college. "
+        "My family income is around 2 lakh per year. "
+        "I have a valid income certificate. "
+        "There are 2 girl children in my family. "
+        "I am not receiving any other scholarship."
+    )
 
-    profile = CitizenProfile(
-    age=21,
-    state="Maharashtra",
-    is_student=True,
-)
+    agent = SevaSathiTAORAgent()
+    result = agent.run(user_text)
 
-    results = search_schemes_for_profile(profile)
+    saved_files = save_agent_outputs(result)
 
-    print(f"Found {len(results)} search result(s).")
+    print("FINAL MESSAGE")
+    print("=" * 60)
+    print(result.final_message)
 
-    for result in results:
-        print("\nCandidate scheme:")
-        print(f"Name: {result.scheme.name}")
-        print(f"Search score: {result.score}")
-        print(f"Application status: {result.scheme.application_window.status.value if result.scheme.application_window else 'unknown'}")
+    print("\nRANKED RESULTS")
+    print("=" * 60)
 
-        print("\nWhy it matched:")
-        for reason in result.matched_reasons:
-            print(f"- {reason}")
+    for ranked in result.ranked_results:
+        print(
+            ranked.search_result.scheme.scheme_id,
+            ranked.recommendation_label.value,
+            ranked.rank_score,
+            ranked.eligibility_result.status.value,
+        )
 
-        if result.possible_concerns:
-            print("\nPossible concerns:")
-            for concern in result.possible_concerns:
-                print(f"- {concern}")
+    print("\nSAVED FILES")
+    print("=" * 60)
+    print(f"Report: {saved_files.report_path}")
+    print(f"Trace: {saved_files.trace_path}")
 
 
 if __name__ == "__main__":
