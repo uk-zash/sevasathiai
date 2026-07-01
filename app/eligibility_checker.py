@@ -1,3 +1,5 @@
+"""Evaluate one citizen profile against one scheme's eligibility rules."""
+
 from app.models import (
     AdmissionType,
     ApplicationStatus,
@@ -16,14 +18,19 @@ PRAGATI_DEGREE_SCHEME_ID = "aicte_pragati_degree"
 PRAGATI_INCOME_LIMIT = 800000
 
 
-
 def _normalize_text(value: Optional[str]) -> str:
+    """Normalize optional text for simple keyword checks."""
     if value is None:
         return ""
     
     return value.strip().lower()
 
 def _course_looks_technical_degree(course_name: Optional[str]) -> Optional[bool]:
+    """Detect whether a course name resembles a technical degree.
+
+    Returns None when the course is missing, so the caller can distinguish
+    unknown information from a known non-technical course.
+    """
     normalized_course = _normalize_text(course_name)
 
     if not normalized_course:
@@ -48,6 +55,7 @@ def _build_user_message(
         missing_information: List[str],
         not_matched_reasons: List[str],
 ) -> str:
+    """Create the short human-readable eligibility summary for one scheme."""
     if status == MatchStatus.likely_match:
         return (
             f"You appear to match the main readiness checks for {scheme.name} based on the information provided. "
@@ -78,6 +86,7 @@ def _decide_result(
     missing_information: list[str],
     not_matched_reasons: list[str],
 ) -> EligibilityResult:
+    """Convert collected rule evidence into status, confidence, and message."""
     if not_matched_reasons:
         status = MatchStatus.not_a_match
         confidence = 0.8
@@ -112,6 +121,11 @@ def _decide_result(
 
 
 def _check_aicte_pragati_degree(profile: CitizenProfile, scheme: Scheme) -> EligibilityResult:
+    """Legacy hard-coded checker kept for Pragati when no JSON rules exist.
+
+    New schemes should prefer `scheme.eligibility_rules`, which are handled by
+    the generic rule engine without adding scheme-specific Python code.
+    """
     matched_reasons: list[str] = []
     missing_information: list[str] = []
     not_matched_reasons: list[str] = []
@@ -209,9 +223,13 @@ def _check_aicte_pragati_degree(profile: CitizenProfile, scheme: Scheme) -> Elig
 
 
 def check_eligibility_for_scheme(profile: CitizenProfile, scheme: Scheme) -> EligibilityResult:
+    """Choose the correct eligibility checker for a scheme."""
+    # Generic JSON rules are the scalable path: adding a new scheme to
+    # schemes.json should normally be enough for eligibility evaluation.
     if scheme.eligibility_rules:
         return check_scheme_with_rules(profile=profile, scheme=scheme)
 
+    # Backward-compatible fallback for older seed data.
     if scheme.scheme_id == PRAGATI_DEGREE_SCHEME_ID:
         return _check_aicte_pragati_degree(profile=profile, scheme=scheme)
 

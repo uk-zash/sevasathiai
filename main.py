@@ -1,8 +1,13 @@
+"""Command-line smoke run for the SevaSathi TAOR agent."""
+
 from app.output_writer import save_agent_outputs
 from app.taor_agent import SevaSathiTAORAgent
 
 
 def main() -> None:
+    """Run the agent with a representative profile and save output artifacts."""
+    # This sample intentionally contains enough details to exercise extraction,
+    # search, eligibility, ranking, and report writing in one local run.
     user_text = (
         "I am 20 years old and I live in Maharashtra. "
         "I am a female student with 45 percent disability. "
@@ -16,6 +21,7 @@ def main() -> None:
     agent = SevaSathiTAORAgent()
     result = agent.run(user_text)
 
+    # Persist both a human-readable report and the structured trace for debugging.
     saved_files = save_agent_outputs(result)
 
     print("FINAL MESSAGE")

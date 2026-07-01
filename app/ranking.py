@@ -1,3 +1,5 @@
+"""Rank eligible scheme candidates by combining relevance and eligibility."""
+
 from typing import List
 
 from app.models import (
@@ -10,6 +12,7 @@ from app.models import (
 
 
 def _base_score_for_status(status: MatchStatus) -> float:
+    """Map eligibility status to a numeric starting score."""
     if status == MatchStatus.likely_match:
         return 1.0
 
@@ -23,6 +26,7 @@ def _base_score_for_status(status: MatchStatus) -> float:
 
 
 def _label_for_status(status: MatchStatus) -> RecommendationLabel:
+    """Translate technical match status into a UI recommendation label."""
     if status == MatchStatus.likely_match:
         return RecommendationLabel.strong_match
 
@@ -39,6 +43,12 @@ def rank_scheme_results(
     search_results: List[SchemeSearchResult],
     eligibility_results: List[EligibilityResult],
 ) -> List[RankedSchemeResult]:
+    """Return searched schemes ordered by final recommendation strength.
+
+    Args:
+        search_results: Candidate schemes from profile/query relevance search.
+        eligibility_results: Rule-check results for those candidate schemes.
+    """
     
     eligibility_by_scheme_id = {
         result.scheme_id: result
@@ -56,6 +66,8 @@ def rank_scheme_results(
 
         status_base_score = _base_score_for_status(eligibility_result.status)
 
+        # Missing details reduce confidence a little, while blocking issues
+        # reduce ranking much more strongly.
         missing_penalty = min(
             len(eligibility_result.missing_information) * 0.04,
             0.20,

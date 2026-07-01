@@ -1,3 +1,5 @@
+"""Tests for loading and validating the scheme JSON database."""
+
 import json
 
 import pytest
@@ -16,6 +18,7 @@ def test_load_schemes_loads_verified_database() -> None:
 
 
 def test_load_schemes_rejects_invalid_category(tmp_path) -> None:
+    # Invalid enums should be caught when maintainers edit schemes.json.
     invalid_database_path = tmp_path / "schemes.json"
 
     invalid_database = [

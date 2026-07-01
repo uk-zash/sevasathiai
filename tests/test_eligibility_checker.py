@@ -1,9 +1,12 @@
+"""Tests for scheme eligibility decisions."""
+
 from app.eligibility_checker import check_eligibility_for_scheme
 from app.models import CitizenProfile, MatchStatus
 from app.scheme_loader import load_schemes
 
 
 def _get_pragati_scheme():
+    """Load the Pragati scheme from the real curated test database."""
     schemes = load_schemes()
 
     for scheme in schemes:

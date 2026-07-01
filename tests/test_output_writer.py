@@ -1,3 +1,5 @@
+"""Tests for Markdown/JSON report generation."""
+
 from pathlib import Path
 
 from app.eligibility_checker import check_eligibility_for_scheme
@@ -9,11 +11,16 @@ from app.scheme_search import search_schemes_for_profile
 def test_report_uses_blocking_issue_wording_for_not_a_match(
     full_pragati_profile: CitizenProfile,
 ) -> None:
+    # A blocked scheme should explain issues clearly without listing documents
+    # that are only useful for actionable matches.
     high_income_profile = full_pragati_profile.model_copy(
         update={"annual_family_income": 900000}
     )
 
-    search_results = search_schemes_for_profile(high_income_profile)
+    search_results = search_schemes_for_profile(
+        high_income_profile,
+        min_score=0,
+    )
     eligibility = check_eligibility_for_scheme(
         profile=high_income_profile,
         scheme=search_results[0].scheme,

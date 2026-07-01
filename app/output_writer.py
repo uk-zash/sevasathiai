@@ -1,3 +1,5 @@
+"""Build Markdown/JSON artifacts for an agent run."""
+
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +17,8 @@ DEFAULT_OUTPUT_DIR = Path("outputs")
 
 
 class SavedOutputPaths(BaseModel):
+    """File paths created when a run is saved to disk."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     output_dir: str = Field(
@@ -39,6 +43,7 @@ class SavedOutputPaths(BaseModel):
 
 
 def _display_value(value: Any) -> str:
+    """Format profile values for Markdown without leaking Python enum objects."""
     if value is None:
         return "Not provided"
 
@@ -48,11 +53,11 @@ def _display_value(value: Any) -> str:
     return str(value)
 
 
-# FIX 1: Changed 'SchemeSearchResult | None' to 'Optional[SchemeSearchResult]'
 def _find_search_result_for_eligibility(
     eligibility: EligibilityResult,
     search_results: list[SchemeSearchResult],
 ) -> Optional[SchemeSearchResult]:
+    """Find the scheme metadata associated with an eligibility result."""
     for search_result in search_results:
         if search_result.scheme.scheme_id == eligibility.scheme_id:
             return search_result
@@ -60,7 +65,97 @@ def _find_search_result_for_eligibility(
     return None
 
 
+def _append_eligibility_details(
+    lines: list[str],
+    eligibility: EligibilityResult,
+    search_result: Optional[SchemeSearchResult],
+) -> None:
+    """Append one scheme's detailed eligibility section to a Markdown buffer.
+
+    Args:
+        lines: Mutable report line buffer.
+        eligibility: Rule-check result to render.
+        search_result: Matching scheme metadata, if the scheme was part of
+            search results.
+    """
+    scheme_name = eligibility.scheme_id
+
+    if search_result:
+        scheme_name = search_result.scheme.name
+
+    lines.append(f"### {scheme_name}")
+    lines.append("")
+    lines.append(f"- Status: `{eligibility.status.value}`")
+    lines.append(f"- Confidence: `{eligibility.confidence}`")
+    lines.append("")
+    lines.append(eligibility.user_message)
+    lines.append("")
+
+    if eligibility.not_matched_reasons:
+        lines.append("#### Blocking issues")
+        lines.append("")
+        for reason in eligibility.not_matched_reasons:
+            lines.append(f"- {reason}")
+        lines.append("")
+
+    if eligibility.matched_reasons:
+        if eligibility.status == MatchStatus.not_a_match:
+            lines.append("#### Other checks that matched but do not override the blocking issue")
+        else:
+            lines.append("#### Matched checks")
+
+        lines.append("")
+        for reason in eligibility.matched_reasons:
+            lines.append(f"- {reason}")
+        lines.append("")
+
+    if eligibility.missing_information:
+        lines.append("#### Missing or uncertain information")
+        lines.append("")
+        for item in eligibility.missing_information:
+            lines.append(f"- {item}")
+        lines.append("")
+
+    if not search_result:
+        return
+
+    scheme = search_result.scheme
+
+    if scheme.required_documents and eligibility.status != MatchStatus.not_a_match:
+        lines.append("#### Documents to prepare")
+        lines.append("")
+        for document in scheme.required_documents:
+            lines.append(f"- {document}")
+        lines.append("")
+
+    if scheme.application_window:
+        lines.append("#### Application window")
+        lines.append("")
+        lines.append(f"- Status: {scheme.application_window.status.value}")
+        lines.append(f"- Academic year: {scheme.application_window.academic_year}")
+        lines.append(f"- Opens at: {scheme.application_window.opens_at}")
+        lines.append(f"- Student deadline: {scheme.application_window.student_deadline}")
+        lines.append(
+            f"- Institute verification deadline: "
+            f"{scheme.application_window.institute_verification_deadline}"
+        )
+        lines.append(
+            f"- Final verification deadline: "
+            f"{scheme.application_window.final_verification_deadline}"
+        )
+        lines.append("")
+
+    lines.append("#### Official sources")
+    lines.append("")
+    for source in scheme.sources:
+        lines.append(f"- {source.publisher}: {source.title}")
+        lines.append(f"  - URL: {source.url}")
+        lines.append(f"  - Last checked: {source.last_checked_at}")
+    lines.append("")
+
+
 def build_markdown_report(result: AgentRunResult) -> str:
+    """Render the full agent result as a Markdown readiness report."""
     lines: list[str] = []
 
     lines.append("# SevaSathi AI Readiness Report")
@@ -127,85 +222,31 @@ def build_markdown_report(result: AgentRunResult) -> str:
                     lines.append(f"- {reason}")
                 lines.append("")
 
-            lines.append(eligibility.user_message)
-            lines.append("")
             search_result = _find_search_result_for_eligibility(
                 eligibility=eligibility,
                 search_results=result.search_results,
             )
 
-            scheme_name = eligibility.scheme_id
+            _append_eligibility_details(
+                lines=lines,
+                eligibility=eligibility,
+                search_result=search_result,
+            )
 
-            if search_result:
-                scheme_name = search_result.scheme.name
+    elif result.eligibility_results:
+        lines.append("## Scheme checks")
+        lines.append("")
 
-            lines.append(f"### {scheme_name}")
-            lines.append("")
-            lines.append(f"- Status: `{eligibility.status.value}`")
-            lines.append(f"- Confidence: `{eligibility.confidence}`")
-            lines.append("")
-            lines.append(eligibility.user_message)
-            lines.append("")
-
-            if eligibility.not_matched_reasons:
-                lines.append("#### Blocking issues")
-                lines.append("")
-                for reason in eligibility.not_matched_reasons:
-                    lines.append(f"- {reason}")
-                lines.append("")
-
-            if eligibility.matched_reasons:
-                if eligibility.status == MatchStatus.not_a_match:
-                    lines.append("#### Other checks that matched but do not override the blocking issue")
-                else:
-                    lines.append("#### Matched checks")
-
-                lines.append("")
-                for reason in eligibility.matched_reasons:
-                    lines.append(f"- {reason}")
-                lines.append("")
-
-            if eligibility.missing_information:
-                lines.append("#### Missing or uncertain information")
-                lines.append("")
-                for item in eligibility.missing_information:
-                    lines.append(f"- {item}")
-                lines.append("")
-
-            if search_result:
-                scheme = search_result.scheme
-
-                if scheme.required_documents and eligibility.status != MatchStatus.not_a_match:
-                    lines.append("#### Documents to prepare")
-                    lines.append("")
-                    for document in scheme.required_documents:
-                        lines.append(f"- {document}")
-                    lines.append("")
-
-                if scheme.application_window:
-                    lines.append("#### Application window")
-                    lines.append("")
-                    lines.append(f"- Status: {scheme.application_window.status.value}")
-                    lines.append(f"- Academic year: {scheme.application_window.academic_year}")
-                    lines.append(f"- Opens at: {scheme.application_window.opens_at}")
-                    lines.append(f"- Student deadline: {scheme.application_window.student_deadline}")
-                    lines.append(
-                        f"- Institute verification deadline: "
-                        f"{scheme.application_window.institute_verification_deadline}"
-                    )
-                    lines.append(
-                        f"- Final verification deadline: "
-                        f"{scheme.application_window.final_verification_deadline}"
-                    )
-                    lines.append("")
-
-                lines.append("#### Official sources")
-                lines.append("")
-                for source in scheme.sources:
-                    lines.append(f"- {source.publisher}: {source.title}")
-                    lines.append(f"  - URL: {source.url}")
-                    lines.append(f"  - Last checked: {source.last_checked_at}")
-                lines.append("")
+        for eligibility in result.eligibility_results:
+            search_result = _find_search_result_for_eligibility(
+                eligibility=eligibility,
+                search_results=result.search_results,
+            )
+            _append_eligibility_details(
+                lines=lines,
+                eligibility=eligibility,
+                search_result=search_result,
+            )
 
     if result.follow_up_questions:
         lines.append("## Follow-up questions")
@@ -240,9 +281,11 @@ def save_agent_outputs(
     result: AgentRunResult,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
 ) -> SavedOutputPaths:
+    """Save timestamped and latest Markdown/JSON outputs for one agent run."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # FIX 2: datetime.now() requires the proper import at the top
+    # Timestamped files preserve history, while latest_* paths are convenient
+    # for quickly opening the newest run.
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     report_path = output_dir / f"report_{run_id}.md"

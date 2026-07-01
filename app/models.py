@@ -1,3 +1,5 @@
+"""Pydantic models that define SevaSathi AI's internal data contract."""
+
 from __future__ import annotations 
 from datetime import date
 from enum import Enum
@@ -5,6 +7,9 @@ from typing import Any, Optional, List
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
+
+# Enums keep LLM-extracted/profile values constrained to known spellings. That
+# makes downstream search, rule evaluation, and ranking deterministic.
 class Gender(str, Enum):
     male = "male"
     female = "female"
@@ -84,6 +89,8 @@ class RuleFailureType(str, Enum):
 
 
 class EligibilityRule(BaseModel):
+    """Machine-readable scheme rule used by the generic eligibility engine."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     field_name: str = Field(
@@ -150,6 +157,8 @@ class AdmissionType(str , Enum):
 
 
 class ApplicationWindow(BaseModel):
+    """Officially verified timing metadata for a scheme application cycle."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     academic_year: str | None = Field(
@@ -190,6 +199,8 @@ class ApplicationWindow(BaseModel):
 
 
 class EvidenceSource(BaseModel):
+    """Official or verified source that supports a scheme entry."""
+
     model_config = ConfigDict(str_strip_whitespace = True , extra="forbid")
 
     source_type: SourceType = Field(
@@ -219,6 +230,8 @@ class EvidenceSource(BaseModel):
 
 
 class Scheme(BaseModel):
+    """One verified scheme record from data/schemes.json."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra = "forbid")
 
     scheme_id: str = Field(
@@ -299,12 +312,15 @@ class Scheme(BaseModel):
     @field_validator("state")
     @classmethod
     def empty_state_to_none(cls, value: str | None) -> str | None:
+        """Treat blank state as all-India/unspecified instead of a real value."""
         if value == "":
             return None
         return value
     
 
 class SchemeSearchResult(BaseModel):
+    """A candidate scheme returned by the search stage."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     scheme: Scheme = Field(
@@ -336,6 +352,8 @@ class RecommendationLabel(str, Enum):
 
 
 class RankedSchemeResult(BaseModel):
+    """A search result plus eligibility evidence and final ranking metadata."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     search_result: SchemeSearchResult = Field(
@@ -363,6 +381,8 @@ class RankedSchemeResult(BaseModel):
 
 
 class EligibilityResult(BaseModel):
+    """Rule-check result for one scheme and one citizen profile."""
+
     scheme_id: str = Field(
         min_length=3,
         description="ID of the scheme that was checked.",
@@ -400,6 +420,7 @@ class EligibilityResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_reasoning(self) -> "EligibilityResult":
+        """Ensure every status includes the evidence needed to explain it."""
         if self.status in {MatchStatus.likely_match, MatchStatus.possible_match}:
             if not self.matched_reasons:
                 raise ValueError("Likely or possible matches must include at least one matched reason.")
@@ -416,6 +437,8 @@ class EligibilityResult(BaseModel):
 
 
 class CitizenProfile(BaseModel):
+    """Structured profile fields collected from the user's query and follow-ups."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     age: int | None = Field(default=None, ge=0, le=120, description="User's age in years.")
@@ -513,12 +536,15 @@ class CitizenProfile(BaseModel):
     @field_validator("state", "district", "course_name")
     @classmethod
     def empty_string_to_none(cls, value:str | None) -> str | None:
+        """Normalize empty text fields so missing-value checks work correctly."""
         if value == "":
             return None
         return value
 
 
 class ProfileExtractionResult(BaseModel):
+    """Validated output expected from the LLM profile-extraction step."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     profile: CitizenProfile = Field(
@@ -548,7 +574,7 @@ class ProfileExtractionResult(BaseModel):
     )
 
 
-## TAOR Trace Models
+# TAOR trace models capture Think/Act/Observe/Respond style debugging details.
 
 class AgentAction(str, Enum):
     extract_profile = "extract_profile"
@@ -560,6 +586,8 @@ class AgentAction(str, Enum):
 
 
 class AgentStep(BaseModel):
+    """One trace step produced while the agent runs."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     step_number: int = Field(
@@ -587,6 +615,8 @@ class AgentStep(BaseModel):
     )
 
 class AgentRunResult(BaseModel):
+    """Complete result object returned by SevaSathiTAORAgent.run()."""
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     profile: CitizenProfile | None = Field(

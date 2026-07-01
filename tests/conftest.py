@@ -1,3 +1,5 @@
+"""Shared pytest fixtures for SevaSathi test cases."""
+
 import pytest
 
 from app.models import (
@@ -12,6 +14,7 @@ from app.models import (
 
 @pytest.fixture
 def full_pragati_profile() -> CitizenProfile:
+    """Return a complete profile that should satisfy the Pragati degree scheme."""
     return CitizenProfile(
         age=21,
         state="Maharashtra",

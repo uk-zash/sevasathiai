@@ -1,3 +1,11 @@
+"""Generic eligibility-rule evaluator.
+
+This module turns `EligibilityRule` objects from scheme JSON into executable
+checks against `CitizenProfile`. New schemes should prefer eligibility_rules so
+they can use this generic engine instead of scheme-specific Python code.
+"""
+
+import re
 from typing import Any, Optional
 
 from app.models import (
@@ -18,6 +26,7 @@ MISSING_SENTINELS = {
 
 
 def _raw_value(value: Any) -> Any:
+    """Return enum `.value` when present, otherwise return the value unchanged."""
     if hasattr(value, "value"):
         return value.value
 
@@ -25,6 +34,7 @@ def _raw_value(value: Any) -> Any:
 
 
 def _is_missing(value: Any) -> bool:
+    """Treat nulls, empty strings, and privacy/unknown sentinels as missing."""
     raw = _raw_value(value)
 
     if raw is None:
@@ -37,6 +47,7 @@ def _is_missing(value: Any) -> bool:
 
 
 def _normalize_for_compare(value: Any) -> Any:
+    """Normalize scalar values for equality/list comparisons."""
     raw = _raw_value(value)
 
     if isinstance(raw, str):
@@ -45,8 +56,20 @@ def _normalize_for_compare(value: Any) -> Any:
     return raw
 
 
+def _normalize_for_contains(value: Any) -> str:
+    """Normalize text for loose substring matching."""
+    normalized = str(_normalize_for_compare(value))
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", normalized)).strip()
+
+
+def _compact_for_contains(value: Any) -> str:
+    """Remove punctuation/spaces so `B Tech`, `B.Tech`, and `BTech` match."""
+    return re.sub(r"[^a-z0-9]+", "", str(_normalize_for_compare(value)))
+
+
 # FIX: Changed 'float | None' to 'Optional[float]' for Python 3.9 compatibility
 def _to_float(value: Any) -> Optional[float]:
+    """Convert profile values to floats for numeric min/max rules."""
     raw = _raw_value(value)
 
     if raw is None:
@@ -59,6 +82,7 @@ def _to_float(value: Any) -> Optional[float]:
 
 
 def _rule_passes(profile_value: Any, rule) -> bool:
+    """Return whether one profile value satisfies one EligibilityRule."""
     operator = rule.operator
 
     if operator == RuleOperator.equals:
@@ -89,12 +113,19 @@ def _rule_passes(profile_value: Any, rule) -> bool:
         return numeric_value >= rule.min_value
 
     if operator == RuleOperator.contains_any:
-        normalized_value = str(_normalize_for_compare(profile_value))
+        normalized_value = _normalize_for_contains(profile_value)
+        compact_value = _compact_for_contains(profile_value)
         search_terms = [
-            str(_normalize_for_compare(value)) for value in rule.expected_values
+            _normalize_for_contains(value) for value in rule.expected_values
+        ]
+        compact_search_terms = [
+            _compact_for_contains(value) for value in rule.expected_values
         ]
 
-        return any(term in normalized_value for term in search_terms)
+        return any(term in normalized_value for term in search_terms) or any(
+            term and term in compact_value
+            for term in compact_search_terms
+        )
 
     if operator == RuleOperator.is_true:
         return profile_value is True
@@ -105,10 +136,21 @@ def _rule_passes(profile_value: Any, rule) -> bool:
     raise ValueError(f"Unsupported rule operator: {operator}")
 
 
+def value_is_missing(value: Any) -> bool:
+    """Public wrapper used by search scoring to share missing-value semantics."""
+    return _is_missing(value)
+
+
+def rule_passes(profile_value: Any, rule) -> bool:
+    """Public wrapper used by search scoring to share rule-pass semantics."""
+    return _rule_passes(profile_value=profile_value, rule=rule)
+
+
 def _build_generic_user_message(
     scheme: Scheme,
     status: MatchStatus,
 ) -> str:
+    """Create a plain-language message for a generic eligibility result."""
     if status == MatchStatus.likely_match:
         return (
             f"You appear to match the main readiness checks for {scheme.name} based on the information provided. "
@@ -139,6 +181,7 @@ def _decide_generic_result(
     missing_information: list[str],
     not_matched_reasons: list[str],
 ) -> EligibilityResult:
+    """Convert collected rule outcomes into a final EligibilityResult."""
     if not_matched_reasons:
         status = MatchStatus.not_a_match
         confidence = 0.8
@@ -171,6 +214,15 @@ def check_scheme_with_rules(
     profile: CitizenProfile,
     scheme: Scheme,
 ) -> EligibilityResult:
+    """Evaluate all machine-readable rules for one scheme and profile.
+
+    Args:
+        profile: Current merged user profile.
+        scheme: Scheme whose `eligibility_rules` should be checked.
+
+    Returns:
+        EligibilityResult with matched, missing, and blocking details.
+    """
     if not scheme.eligibility_rules:
         return EligibilityResult(
             scheme_id=scheme.scheme_id,
@@ -192,6 +244,8 @@ def check_scheme_with_rules(
     not_matched_reasons: list[str] = []
 
     for rule in scheme.eligibility_rules:
+        # Invalid field names are data/config issues, so they are surfaced as
+        # missing information instead of crashing the user flow.
         if not hasattr(profile, rule.field_name):
             missing_information.append(
                 f"Internal rule configuration error: profile field '{rule.field_name}' does not exist."

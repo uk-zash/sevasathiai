@@ -1,3 +1,5 @@
+"""Extract structured citizen profile fields from a free-form user message."""
+
 from pydantic import ValidationError
 
 from app.llm_client import get_groq_client
@@ -5,7 +7,8 @@ from app.models import ProfileExtractionResult
 from app.settings import settings
 
 
-
+# The prompt deliberately limits this step to extraction only. Scheme matching,
+# ranking, and eligibility decisions happen later in deterministic code.
 PROFILE_EXTRACTION_SYSTEM_PROMPT = """
 You are SevaSathi AI's profile extraction component.
 
@@ -32,10 +35,21 @@ Rules:
 12. Extract receiving_other_scholarship only if the user clearly says they are receiving or not receiving another scholarship.
 13. If follow-up questions are provided with the user's answers, use the question text as context to understand short answers like yes, no, first year, or lateral entry.
 14. Extract disability_percentage only when the user clearly states a percentage such as 40%, 55%, or 75 percent. Do not guess disability percentage from general disability wording.
+15. If a follow-up asks whether the girl-student condition applies and the answer is yes, set gender to female. If the answer is no, set gender to other.
+16. If a follow-up asks whether the disability or specially-abled condition applies and the answer is yes, set has_disability to true. If the answer is no, set has_disability to false.
 """
 
 
 def extract_profile_from_text(user_text:str) -> ProfileExtractionResult:
+    """Call the LLM and validate its JSON response as a ProfileExtractionResult.
+
+    Args:
+        user_text: The raw query or follow-up answer bundle written by the user.
+
+    Returns:
+        A typed extraction result containing the partial citizen profile and any
+        privacy warnings detected from sensitive identifiers.
+    """
     client = get_groq_client()
 
     response = client.chat.completions.create(
@@ -60,10 +74,12 @@ def extract_profile_from_text(user_text:str) -> ProfileExtractionResult:
             },
         },
         temperature=0,
-        max_completion_tokens=2048
+        max_completion_tokens=1048
     )
     content = response.choices[0].message.content
 
+    # Keep the raw model output visible during local development; validation
+    # below still prevents malformed JSON from entering the app state.
     print("\n--- RAW GROQ JSON OUTPUT ---")
     print(content)
     print("----------------------------\n")

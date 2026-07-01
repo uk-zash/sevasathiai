@@ -1,7 +1,11 @@
+"""Environment-backed application settings."""
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    """Runtime configuration loaded from environment variables or .env."""
+
     groq_api_key: SecretStr = Field(
         validation_alias="GROQ_API_KEY",
         description="Groq API key used to call the LLM.",
@@ -26,4 +30,5 @@ class Settings(BaseSettings):
     )
 
 
+# Importing `settings` gives the rest of the app one validated config object.
 settings = Settings()

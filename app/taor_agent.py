@@ -1,13 +1,23 @@
+"""TAOR-style orchestration for SevaSathi AI.
+
+The agent coordinates the full reasoning loop:
+profile extraction -> scheme search -> eligibility checks -> ranking ->
+follow-up questions or final guidance.
+"""
+
 from app.eligibility_checker import  check_eligibility_for_scheme
 from app.models import (
     AgentAction,
     AgentRunResult,
     AgentStep,
     CitizenProfile,
+    EligibilityRule,
     EligibilityResult,
     MatchStatus,
     RankedSchemeResult,
     RecommendationLabel,
+    RuleOperator,
+    Scheme,
     SchemeSearchResult,
 )
 
@@ -18,7 +28,66 @@ from app.profile_extractor import extract_profile_from_text
 from app.scheme_search import search_schemes_for_profile
 from typing import Optional
 
+FIELD_QUESTION_MAP = {
+    # Maps CitizenProfile fields to user-facing follow-up questions. New schemes
+    # work generically when their EligibilityRule.field_name exists here or can
+    # fall back to `_question_for_rule`.
+    "age": "What is your age?",
+    "state": "Which Indian state or union territory do you live in?",
+    "district": "Which district do you live in?",
+    "gender": (
+        "Does the girl-student condition apply to you for this scheme? "
+        "You may answer Yes, No, or Prefer not to say."
+    ),
+    "is_student": "Are you currently a student?",
+    "education_level": (
+        "What is your current education level? "
+        "For example: school, undergraduate, postgraduate, diploma, or vocational."
+    ),
+    "course_name": (
+        "What course are you studying? "
+        "For example: B.Tech, B.E., diploma, BA, BSc, or another course."
+    ),
+    "institution_type": "What type of institution do you study in?",
+    "admission_type": (
+        "Were you admitted into the first year normally, "
+        "or into the second year through lateral entry?"
+    ),
+    "is_aicte_approved_institution": "Is your institution AICTE-approved?",
+    "annual_family_income": "What is your approximate annual family income in INR?",
+    "has_valid_income_certificate": "Do you have a valid income certificate issued by your State or UT Government?",
+    "girl_children_in_family": (
+        "How many girl children are in your family? "
+        "You may skip this if you are not comfortable sharing."
+    ),
+    "receiving_other_scholarship": "Are you currently receiving any other scholarship or financial assistance?",
+    "social_category": "What is your social category? You may answer General, SC, ST, OBC, EWS, or Prefer not to say.",
+    "has_disability": (
+        "Does the specially-abled or disability condition apply to you for this scheme? "
+        "You may answer Yes, No, or Prefer not to say."
+    ),
+    "disability_percentage": (
+        "What is your disability percentage as mentioned on your disability certificate? "
+        "You may skip this if you are not comfortable sharing."
+    ),
+    "minority_status": "Do you belong to a minority community? You may answer Yes, No, or Prefer not to say.",
+    "wants_category_based_schemes": "Do you want category-based schemes to be considered?",
+}
+
+
+def _field_label(field_name: str) -> str:
+    """Convert a profile field name into readable text for fallback questions."""
+    return field_name.replace("_", " ")
+
+
 class SevaSathiTAORAgent:
+    """Runs one complete SevaSathi AI decision loop.
+
+    Args:
+        max_candidate_checks: Maximum number of searched candidate schemes that
+            will receive expensive rule-based eligibility checks.
+    """
+
     def __init__(self , max_candidate_checks: int = 3) -> None:
         if max_candidate_checks < 1 :
             raise ValueError("max_candidate_checks must be atleast 1")
@@ -29,8 +98,24 @@ class SevaSathiTAORAgent:
     def run(
         self,
         user_text: str,
-        existing_profile: Optional[CitizenProfile] = None
+        existing_profile: Optional[CitizenProfile] = None,
+        search_query_text: Optional[str] = None,
     ) -> AgentRunResult:
+        """Run the assistant for an initial query or follow-up answer.
+
+        Args:
+            user_text: Current user message. For follow-up rounds this can be a
+                generated question/answer context block.
+            existing_profile: Previously extracted profile, if this is a
+                follow-up round.
+            search_query_text: Original user request used for retrieval across
+                follow-ups so short answers do not change search intent.
+
+        Returns:
+            AgentRunResult containing the merged profile, trace steps, search
+            results, eligibility results, ranked results, follow-up questions,
+            and final user-facing message.
+        """
         steps: list[AgentStep] = []
         step_number = 1
 
@@ -40,6 +125,7 @@ class SevaSathiTAORAgent:
             observation: str,
             data: Optional[dict] = None, 
         ) -> None:
+            """Append a structured trace step for debugging and UI display."""
             nonlocal step_number
 
             steps.append(
@@ -54,6 +140,7 @@ class SevaSathiTAORAgent:
 
             step_number += 1
 
+        # Step 1: extract a structured profile from the latest text.
         extraction = extract_profile_from_text(user_text)
         profile = merge_citizen_profiles(
             existing_profile=existing_profile,
@@ -87,7 +174,12 @@ class SevaSathiTAORAgent:
             },
         )
 
-        search_results = search_schemes_for_profile(profile)
+        # Step 2: retrieve candidate schemes using the merged profile and the
+        # original search intent.
+        search_results = search_schemes_for_profile(
+            profile,
+            query_text=search_query_text or user_text,
+        )
 
         add_step(
             thought="Now I should search the verified scheme database using the extracted profile.",
@@ -102,13 +194,41 @@ class SevaSathiTAORAgent:
         )
 
         if not search_results:
-            final_message = self._build_no_scheme_message(
-                missing_fields=basic_missing_fields,
+            follow_up_questions = []
+
+            if profile.is_student is not False:
+                follow_up_questions = self._questions_from_missing_fields(basic_missing_fields)
+
+            if follow_up_questions:
+                final_message = self._build_follow_up_message(
+                    follow_up_questions=follow_up_questions,
+                    privacy_warnings=extraction.privacy_warnings,
+                )
+
+                add_step(
+                    thought="No candidate schemes were found yet because important search details are missing.",
+                    action=AgentAction.ask_follow_up,
+                    observation=f"Prepared {len(follow_up_questions)} follow-up question(s).",
+                    data={"follow_up_questions": follow_up_questions},
+                )
+
+                return AgentRunResult(
+                    profile=profile,
+                    search_results=[],
+                    eligibility_results=[],
+                    ranked_results=[],
+                    steps=steps,
+                    needs_follow_up=True,
+                    follow_up_questions=follow_up_questions,
+                    final_message=final_message,
+                )
+
+            final_message = self._build_no_verified_match_message(
                 privacy_warnings=extraction.privacy_warnings,
             )
 
             add_step(
-                thought="No candidate schemes were found, so I should explain what information may be needed next.",
+                thought="No candidate schemes were found, so I should show a no-match response.",
                 action=AgentAction.final_response,
                 observation="Created a no-match response.",
                 data={"final_message": final_message},
@@ -120,13 +240,14 @@ class SevaSathiTAORAgent:
                 eligibility_results=[],
                 ranked_results=[],
                 steps=steps,
-                needs_follow_up=bool(basic_missing_fields),
-                follow_up_questions=self._questions_from_missing_fields(basic_missing_fields),
+                needs_follow_up=False,
+                follow_up_questions=[],
                 final_message=final_message,
             )
 
         eligibility_results: list[EligibilityResult] = []
 
+        # Step 3: run rule-based checks only for the strongest candidates.
         for search_result in search_results[: self.max_candidate_checks]:
             eligibility = check_eligibility_for_scheme(
                 profile=profile,
@@ -153,10 +274,13 @@ class SevaSathiTAORAgent:
             },
         )
 
+        # Step 4: combine retrieval relevance and eligibility status.
         ranked_results = rank_scheme_results(
             search_results=search_results,
             eligibility_results=eligibility_results,
         )
+        # Do not show hard-blocked schemes as recommendations in the UI.
+        actionable_ranked_results = self._actionable_ranked_results(ranked_results)
 
         add_step(
             thought="Multiple candidate schemes need ranking before creating guidance.",
@@ -175,12 +299,12 @@ class SevaSathiTAORAgent:
             },
         )
 
-        follow_up_questions = self._build_follow_up_questions(ranked_results)
+        # Step 5: ask for missing details before showing scheme analysis.
+        follow_up_questions = self._build_follow_up_questions(actionable_ranked_results)
         needs_follow_up = len(follow_up_questions) > 0
 
         if needs_follow_up:
             final_message = self._build_follow_up_message(
-                ranked_results=ranked_results,
                 follow_up_questions=follow_up_questions,
                 privacy_warnings=extraction.privacy_warnings,
             )
@@ -191,9 +315,31 @@ class SevaSathiTAORAgent:
                 observation=f"Prepared {len(follow_up_questions)} follow-up question(s).",
                 data={"follow_up_questions": follow_up_questions},
             )
+        elif not actionable_ranked_results:
+            final_message = self._build_no_verified_match_message(
+                privacy_warnings=extraction.privacy_warnings,
+            )
+
+            add_step(
+                thought="Every checked candidate has a blocking issue, so I should show a no-match response.",
+                action=AgentAction.final_response,
+                observation="Created a no-match response.",
+                data={"final_message": final_message},
+            )
+
+            return AgentRunResult(
+                profile=profile,
+                search_results=[],
+                eligibility_results=[],
+                ranked_results=[],
+                steps=steps,
+                needs_follow_up=False,
+                follow_up_questions=[],
+                final_message=final_message,
+            )
         else:
             final_message = self._build_final_guidance_message(
-                ranked_results=ranked_results,
+                ranked_results=actionable_ranked_results,
                 privacy_warnings=extraction.privacy_warnings,
             )
 
@@ -208,48 +354,122 @@ class SevaSathiTAORAgent:
             profile=profile,
             search_results=search_results,
             eligibility_results=eligibility_results,
-            ranked_results=ranked_results,
+            ranked_results=actionable_ranked_results,
             steps=steps,
             needs_follow_up=needs_follow_up,
             follow_up_questions=follow_up_questions,
             final_message=final_message,
         )
         
+    def _actionable_ranked_results(
+        self,
+        ranked_results: list[RankedSchemeResult],
+    ) -> list[RankedSchemeResult]:
+        """Remove schemes with clear blocking failures from final recommendations."""
+        return [
+            ranked
+            for ranked in ranked_results
+            if ranked.eligibility_result.status != MatchStatus.not_a_match
+        ]
 
     def _build_follow_up_questions(
         self,
         ranked_results: list[RankedSchemeResult],
     ) -> list[str]:
-        if any(
-            ranked.eligibility_result.status == MatchStatus.likely_match
-            for ranked in ranked_results
-        ):
-            return []
+        """Build up to three follow-up questions from missing eligibility data.
 
-        top_actionable_result: RankedSchemeResult | None = None
+        Questions are generated from the underlying EligibilityRule.field_name
+        whenever possible. This makes follow-ups work for new schemes as long as
+        their rules point to fields in CitizenProfile.
+        """
+        questions: list[str] = []
 
         for ranked in ranked_results:
-            if ranked.eligibility_result.status in {
+            if ranked.eligibility_result.status not in {
                 MatchStatus.possible_match,
                 MatchStatus.not_enough_information,
             }:
-                top_actionable_result = ranked
-                break
+                continue
 
-        if top_actionable_result is None:
-            return []
+            missing_items = ranked.eligibility_result.missing_information
+            # Ask the broad condition first. Example: ask whether disability
+            # applies before asking for disability percentage.
+            has_missing_gender_condition = any(
+                "gender" in item.lower() or "girl-student" in item.lower()
+                for item in missing_items
+            )
+            has_missing_disability_status = any(
+                "disability status" in item.lower() or "specially-abled" in item.lower()
+                for item in missing_items
+            )
 
-        questions: list[str] = []
+            for missing_item in missing_items:
+                normalized_missing_item = missing_item.lower()
 
-        for missing_item in top_actionable_result.eligibility_result.missing_information:
-            question = self._question_for_missing_item(missing_item)
+                if has_missing_gender_condition and "girl children" in normalized_missing_item:
+                    continue
 
-            if question and question not in questions:
-                questions.append(question)
+                if has_missing_disability_status and "disability percentage" in normalized_missing_item:
+                    continue
 
-        return questions[:3]
+                rule = self._rule_for_missing_item(
+                    scheme=ranked.search_result.scheme,
+                    missing_item=missing_item,
+                )
+                question = self._question_for_rule(rule) if rule else None
+
+                if question is None:
+                    question = self._question_for_missing_item(missing_item)
+
+                if question and question not in questions:
+                    questions.append(question)
+
+                if len(questions) == 3:
+                    return questions
+
+        return questions
+
+    def _rule_for_missing_item(
+        self,
+        scheme: Scheme,
+        missing_item: str,
+    ) -> Optional[EligibilityRule]:
+        """Find the EligibilityRule that produced a missing/failure message."""
+        for rule in scheme.eligibility_rules:
+            if missing_item in {rule.missing_message, rule.failed_reason}:
+                return rule
+
+        return None
+
+    def _question_for_rule(self, rule: EligibilityRule) -> Optional[str]:
+        """Create a follow-up question from a machine-readable rule."""
+        mapped_question = FIELD_QUESTION_MAP.get(rule.field_name)
+
+        if mapped_question:
+            return mapped_question
+
+        label = _field_label(rule.field_name)
+
+        if rule.operator in {RuleOperator.is_true, RuleOperator.is_false}:
+            return f"Can you confirm whether {label} applies?"
+
+        if rule.operator in {RuleOperator.max_value, RuleOperator.min_value}:
+            return f"What is your {label}?"
+
+        if rule.operator == RuleOperator.in_list and rule.expected_values:
+            options = ", ".join(str(value) for value in rule.expected_values[:5])
+            return f"What is your {label}? Accepted values include: {options}."
+
+        if rule.operator == RuleOperator.equals and rule.expected_value is not None:
+            return f"What is your {label}?"
+
+        if rule.operator == RuleOperator.contains_any:
+            return f"Please provide your {label}."
+
+        return f"Please provide your {label}."
 
     def _question_for_missing_item(self, missing_item: str) -> Optional[str]:
+        """Fallback question builder for legacy/custom missing-message text."""
         normalized = missing_item.lower()
 
         if "gender" in normalized:
@@ -298,7 +518,7 @@ class SevaSathiTAORAgent:
             return "Are you currently receiving any other scholarship or financial assistance?"
 
         if "application window" in normalized:
-            return "Please verify the current application window on the official portal before applying."
+            return None
         
         if "disability percentage" in normalized:
             return (
@@ -314,19 +534,11 @@ class SevaSathiTAORAgent:
         return None
 
     def _questions_from_missing_fields(self, missing_fields: list[str]) -> list[str]:
-        field_question_map = {
-            "state": "Which Indian state or union territory do you live in?",
-            "age": "What is your age?",
-            "is_student": "Are you currently a student?",
-            "education_level": "What is your current education level?",
-            "course_name": "What course or class are you studying?",
-            "annual_family_income": "What is your approximate annual family income in INR?",
-        }
-
+        """Build basic profile questions when no scheme candidates are available."""
         questions: list[str] = []
 
         for field_name in missing_fields:
-            question = field_question_map.get(field_name)
+            question = FIELD_QUESTION_MAP.get(field_name)
 
             if question and question not in questions:
                 questions.append(question)
@@ -338,6 +550,7 @@ class SevaSathiTAORAgent:
         missing_fields: list[str],
         privacy_warnings: list[str],
     ) -> str:
+        """Legacy no-scheme message kept for compatibility with older flows."""
         message_parts: list[str] = []
 
         if privacy_warnings:
@@ -361,12 +574,11 @@ class SevaSathiTAORAgent:
 
         return "\n".join(message_parts)
 
-    def _build_follow_up_message(
+    def _build_no_verified_match_message(
         self,
-        ranked_results: list[RankedSchemeResult],
-        follow_up_questions: list[str],
         privacy_warnings: list[str],
     ) -> str:
+        """Message shown when no actionable verified candidate remains."""
         message_parts: list[str] = []
 
         if privacy_warnings:
@@ -374,48 +586,33 @@ class SevaSathiTAORAgent:
                 "Privacy note: please do not share Aadhaar numbers, OTPs, bank account numbers, or certificate IDs."
             )
 
-        top_ranked = ranked_results[0]
-        best_scheme_name = top_ranked.search_result.scheme.name
-        best_result = top_ranked.eligibility_result
-
         message_parts.append(
-            f"I found a possible verified scheme match: {best_scheme_name}."
+            "I could not find a verified scheme match from the current local database based on the details provided."
+        )
+        message_parts.append(
+            "You can try again with different or corrected details, or verify directly on official portals."
         )
 
+        return "\n".join(message_parts)
+
+    def _build_follow_up_message(
+        self,
+        follow_up_questions: list[str],
+        privacy_warnings: list[str],
+    ) -> str:
+        """Message shown when the UI should ask questions before analysis."""
+        message_parts: list[str] = []
+
+        if privacy_warnings:
+            message_parts.append(
+                "Privacy note: please do not share Aadhaar numbers, OTPs, bank account numbers, or certificate IDs."
+            )
+
         message_parts.append(
-            f"Current recommendation level: {top_ranked.recommendation_label.value}."
+            "I need a little more information before I can show the best verified matches."
         )
-
         message_parts.append(
-            "I cannot give stronger readiness guidance yet because some important details are missing or uncertain."
-        )
-
-        if best_result.matched_reasons:
-            message_parts.append("\nWhat already seems to match:")
-            for reason in best_result.matched_reasons[:5]:
-                message_parts.append(f"- {reason}")
-
-        if best_result.missing_information:
-            message_parts.append("\nWhat still needs to be clarified:")
-            for item in best_result.missing_information[:5]:
-                message_parts.append(f"- {item}")
-
-        if len(ranked_results) > 1:
-            message_parts.append("\nOther schemes checked:")
-            for ranked in ranked_results[1:3]:
-                scheme = ranked.search_result.scheme
-                message_parts.append(
-                    f"- {scheme.name}: {ranked.recommendation_label.value}, "
-                    f"status {ranked.eligibility_result.status.value}"
-                )
-
-        message_parts.append(
-            "\nPlease answer the follow-up questions shown in the form. "
-            "You may skip any question you are not comfortable answering."
-        )
-
-        message_parts.append(
-            "\nPlease verify all final details on the official portal before applying."
+            "Please answer the questions below. You may skip any question you are not comfortable answering."
         )
 
         return "\n".join(message_parts)
@@ -425,6 +622,7 @@ class SevaSathiTAORAgent:
         ranked_results: list[RankedSchemeResult],
         privacy_warnings: list[str],
     ) -> str:
+        """Build the final user-facing guidance after enough information exists."""
         message_parts: list[str] = []
 
         if privacy_warnings:
